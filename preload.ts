@@ -44,4 +44,6 @@ contextBridge.exposeInMainWorld('api', {
   onToggleTerminal: (callback: () => void): void => {
     ipcRenderer.on('toggle-terminal', () => callback());
   },
+
+  openExternal: (url: string): void => { ipcRenderer.invoke('open-external', url); },
 });

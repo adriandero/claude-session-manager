@@ -53,6 +53,27 @@ class TerminalWrapper {
       }
     });
 
+    const urlRegex = /https?:\/\/[^\s"'<>\])}]+/g;
+    this.terminal.registerLinkProvider({
+      provideLinks: (lineNumber: number, callback: (links: ILink[] | undefined) => void) => {
+        const line = this.terminal.buffer.active.getLine(lineNumber - 1);
+        if (!line) { callback(undefined); return; }
+        const text = line.translateToString(true);
+        const links: ILink[] = [];
+        let match: RegExpExecArray | null;
+        while ((match = urlRegex.exec(text)) !== null) {
+          const startX = match.index + 1;
+          const endX = match.index + match[0].length;
+          links.push({
+            range: { start: { x: startX, y: lineNumber }, end: { x: endX, y: lineNumber } },
+            text: match[0],
+            activate: (_event: MouseEvent, url: string) => { window.api.openExternal(url); },
+          });
+        }
+        callback(links.length > 0 ? links : undefined);
+      },
+    });
+
     this._resizeObserver = new ResizeObserver(() => {
       this.fit();
       if (this.onResizeCallback) {

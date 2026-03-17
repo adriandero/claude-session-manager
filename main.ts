@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, dialog, globalShortcut, IpcMainInvokeEvent, IpcMainEvent } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, dialog, globalShortcut, shell, IpcMainInvokeEvent, IpcMainEvent } from 'electron';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -233,6 +233,12 @@ function createWindow(): void {
 
   ipcMain.handle('shell:buffer', (_event: IpcMainInvokeEvent, sessionId: string) => {
     return shellManager!.getBuffer(sessionId);
+  });
+
+  ipcMain.handle('open-external', (_event: IpcMainInvokeEvent, url: string) => {
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
   });
 
   ipcMain.on('shell:input', (_event: IpcMainEvent, sessionId: string, data: string) => {

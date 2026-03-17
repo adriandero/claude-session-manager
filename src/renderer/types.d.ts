@@ -11,6 +11,26 @@ declare class Terminal {
   focus(): void;
   dispose(): void;
   onData(callback: (data: string) => void): void;
+  registerLinkProvider(provider: ILinkProvider): IDisposable;
+  buffer: { active: { getLine(y: number): IBufferLine | undefined } };
+}
+
+interface IDisposable {
+  dispose(): void;
+}
+
+interface IBufferLine {
+  translateToString(trimRight?: boolean, startColumn?: number, endColumn?: number): string;
+}
+
+interface ILinkProvider {
+  provideLinks(bufferLineNumber: number, callback: (links: ILink[] | undefined) => void): void;
+}
+
+interface ILink {
+  range: { start: { x: number; y: number }; end: { x: number; y: number } };
+  text: string;
+  activate(event: MouseEvent, text: string): void;
 }
 
 declare namespace FitAddon {
@@ -53,6 +73,7 @@ interface ElectronAPI {
   onShellOutput(callback: (id: string, data: string) => void): void;
   onShellExit(callback: (id: string, code: number) => void): void;
   onToggleTerminal(callback: () => void): void;
+  openExternal(url: string): void;
 }
 
 interface Window {
