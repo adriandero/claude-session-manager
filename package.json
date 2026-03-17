@@ -9,7 +9,33 @@
     "copy-assets": "cp src/renderer/index.html dist/src/renderer/ && cp src/renderer/styles.css dist/src/renderer/",
     "start": "npm run build && electron .",
     "watch": "tsc -p tsconfig.json --watch & tsc -p tsconfig.renderer.json --watch",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true"
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true",
+    "dist": "npm run build && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.adriandero.claude-session-manager",
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "src/renderer/index.html",
+      "src/renderer/styles.css",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/@xterm/xterm",
+        "to": "node_modules/@xterm/xterm"
+      },
+      {
+        "from": "node_modules/@xterm/addon-fit",
+        "to": "node_modules/@xterm/addon-fit"
+      }
+    ]
   },
   "keywords": [],
   "author": "",
@@ -18,11 +44,12 @@
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "electron": "^41.0.2",
     "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "electron": "^41.0.2",
+    "electron-builder": "^26.8.1",
     "typescript": "^5.9.3"
   }
 }
