@@ -292,39 +292,57 @@ document.addEventListener('DOMContentLoaded', () => {
     const list = document.getElementById('session-list')!;
     list.innerHTML = '';
 
+    // Group sessions by cwd
+    const groups = new Map<string, [string, SessionInfo][]>();
     for (const [id, session] of sessions) {
-      const li = document.createElement('li');
-      li.className = id === activeSessionId ? 'active' : '';
-      li.innerHTML = `
-        <span class="status-dot ${session.status}"></span>
-        <span class="session-name" title="${session.cwd}">${session.name}</span>
-        <button class="session-close" title="Close session">&times;</button>
-      `;
+      const cwd = session.cwd || 'Unknown';
+      if (!groups.has(cwd)) groups.set(cwd, []);
+      groups.get(cwd)!.push([id, session]);
+    }
 
-      li.addEventListener('click', (e: MouseEvent) => {
-        if ((e.target as HTMLElement).classList.contains('session-close')) return;
-        if ((e.target as HTMLElement).classList.contains('session-rename-input')) return;
-        switchToSession(id);
-      });
+    for (const [cwd, groupSessions] of groups) {
+      // Render project header
+      const header = document.createElement('li');
+      header.className = 'project-header';
+      header.title = cwd;
+      header.textContent = cwd.split('/').pop() || cwd;
+      list.appendChild(header);
 
-      li.querySelector('.session-close')!.addEventListener('click', async () => {
-        await window.api.killSession(id);
-        sessions.delete(id);
-        shellCreated.delete(id);
+      // Render sessions in this group
+      for (const [id, session] of groupSessions) {
+        const li = document.createElement('li');
+        li.className = id === activeSessionId ? 'active' : '';
+        li.innerHTML = `
+          <span class="status-dot ${session.status}"></span>
+          <span class="session-name" title="${session.cwd}">${session.name}</span>
+          <button class="session-close" title="Close session">&times;</button>
+        `;
 
-        if (activeSessionId === id) {
-          activeSessionId = null;
-          terminalPanel.classList.remove('visible');
-          terminalTabs.classList.remove('visible');
-          emptyState.style.display = '';
-          const remaining = Array.from(sessions.keys());
-          if (remaining.length > 0) switchToSession(remaining[0]);
-        }
+        li.addEventListener('click', (e: MouseEvent) => {
+          if ((e.target as HTMLElement).classList.contains('session-close')) return;
+          if ((e.target as HTMLElement).classList.contains('session-rename-input')) return;
+          switchToSession(id);
+        });
 
-        renderSidebar();
-      });
+        li.querySelector('.session-close')!.addEventListener('click', async () => {
+          await window.api.killSession(id);
+          sessions.delete(id);
+          shellCreated.delete(id);
 
-      list.appendChild(li);
+          if (activeSessionId === id) {
+            activeSessionId = null;
+            terminalPanel.classList.remove('visible');
+            terminalTabs.classList.remove('visible');
+            emptyState.style.display = '';
+            const remaining = Array.from(sessions.keys());
+            if (remaining.length > 0) switchToSession(remaining[0]);
+          }
+
+          renderSidebar();
+        });
+
+        list.appendChild(li);
+      }
     }
   }
 });

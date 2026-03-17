@@ -86,6 +86,26 @@ html, body {
   -webkit-app-region: no-drag;
 }
 
+#session-list li.project-header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  padding: 8px 16px 4px;
+  cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#session-list li.project-header:hover {
+  background: none;
+}
+
+#session-list li.project-header ~ li.project-header {
+  margin-top: 8px;
+}
+
 #session-list li {
   padding: 10px 16px;
   cursor: pointer;
