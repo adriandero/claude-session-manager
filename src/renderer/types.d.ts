@@ -44,6 +44,15 @@ interface ElectronAPI {
   onExit(callback: (id: string, code: number) => void): void;
   onNewSession(callback: () => void): void;
   onSwitchSession(callback: (id: string) => void): void;
+
+  // Companion shell
+  createShell(id: string): Promise<string>;
+  getShellBuffer(id: string): Promise<string>;
+  sendShellInput(id: string, data: string): void;
+  resizeShell(id: string, cols: number, rows: number): void;
+  onShellOutput(callback: (id: string, data: string) => void): void;
+  onShellExit(callback: (id: string, code: number) => void): void;
+  onToggleTerminal(callback: () => void): void;
 }
 
 interface Window {

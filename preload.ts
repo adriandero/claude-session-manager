@@ -28,4 +28,20 @@ contextBridge.exposeInMainWorld('api', {
   onSwitchSession: (callback: (id: string) => void): void => {
     ipcRenderer.on('switch-session', (_, id) => callback(id));
   },
+
+  // Companion shell
+  createShell: (id: string): Promise<string> => ipcRenderer.invoke('shell:create', id),
+  getShellBuffer: (id: string): Promise<string> => ipcRenderer.invoke('shell:buffer', id),
+  sendShellInput: (id: string, data: string): void => ipcRenderer.send('shell:input', id, data),
+  resizeShell: (id: string, cols: number, rows: number): void =>
+    ipcRenderer.send('shell:resize', id, cols, rows),
+  onShellOutput: (callback: (id: string, data: string) => void): void => {
+    ipcRenderer.on('shell:output', (_, id, data) => callback(id, data));
+  },
+  onShellExit: (callback: (id: string, code: number) => void): void => {
+    ipcRenderer.on('shell:exit', (_, id, code) => callback(id, code));
+  },
+  onToggleTerminal: (callback: () => void): void => {
+    ipcRenderer.on('toggle-terminal', () => callback());
+  },
 });

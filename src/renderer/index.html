@@ -18,7 +18,14 @@
       <button id="new-session-btn">+ New Session</button>
     </aside>
     <main id="terminal-container">
-      <div id="terminal-panel"></div>
+      <div id="terminal-tabs">
+        <button class="terminal-tab active" data-tab="claude">Claude</button>
+        <button class="terminal-tab" data-tab="shell">Terminal</button>
+      </div>
+      <div id="terminal-panels">
+        <div id="terminal-panel"></div>
+        <div id="shell-panel"></div>
+      </div>
       <div id="empty-state">
         <p>No session selected</p>
         <p class="hint">Click "+ New Session" to start</p>

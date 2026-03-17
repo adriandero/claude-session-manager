@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import SessionManager from './src/session-manager';
+import ShellManager from './src/shell-manager';
 import NotificationService from './src/notification';
 
 const RECENT_DIRS_PATH = path.join(os.homedir(), '.claude-session-manager', 'recent-dirs.json');
@@ -36,6 +37,7 @@ app.name = 'Claude Session Manager';
 
 let mainWindow: BrowserWindow | null = null;
 let sessionManager: SessionManager | null = null;
+let shellManager: ShellManager | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -104,7 +106,22 @@ function createWindow(): void {
   const win = mainWindow;
 
   sessionManager = new SessionManager();
+  shellManager = new ShellManager();
   const notificationService = new NotificationService(sessionManager, win);
+
+  shellManager.on('output', (sessionId: string, data: string) => {
+    win.webContents.send('shell:output', sessionId, data);
+  });
+
+  shellManager.on('exit', (sessionId: string, exitCode: number) => {
+    win.webContents.send('shell:exit', sessionId, exitCode);
+  });
+
+  sessionManager.on('cwd-change', (sessionId: string, newCwd: string) => {
+    if (shellManager!.hasShell(sessionId)) {
+      shellManager!.cdTo(sessionId, newCwd);
+    }
+  });
 
   sessionManager.on('output', (sessionId: string, data: string) => {
     win.webContents.send('session:output', sessionId, data);
@@ -118,10 +135,13 @@ function createWindow(): void {
     win.webContents.send('session:exit', sessionId, exitCode);
   });
 
-  // Cmd+N shortcut to create new session
+  // Keyboard shortcuts
   win.webContents.on('before-input-event', (_event, input) => {
-    if (input.meta && input.key === 'n' && input.type === 'keyDown') {
+    if (input.type !== 'keyDown' || !input.meta) return;
+    if (input.key === 'n') {
       win.webContents.send('new-session');
+    } else if (input.shift && input.key === 't') {
+      win.webContents.send('toggle-terminal');
     }
   });
 
@@ -190,6 +210,7 @@ function createWindow(): void {
   });
 
   ipcMain.handle('session:kill', (_event: IpcMainInvokeEvent, sessionId: string) => {
+    shellManager?.killShell(sessionId);
     sessionManager?.killSession(sessionId);
   });
 
@@ -202,6 +223,25 @@ function createWindow(): void {
   ipcMain.handle('session:buffer', (_event: IpcMainInvokeEvent, sessionId: string) => {
     return sessionManager!.getBuffer(sessionId);
   });
+
+  // Shell IPC handlers
+  ipcMain.handle('shell:create', (_event: IpcMainInvokeEvent, sessionId: string) => {
+    const session = sessionManager!.sessions.get(sessionId);
+    if (!session) return '';
+    return shellManager!.createShell(sessionId, session.cwd);
+  });
+
+  ipcMain.handle('shell:buffer', (_event: IpcMainInvokeEvent, sessionId: string) => {
+    return shellManager!.getBuffer(sessionId);
+  });
+
+  ipcMain.on('shell:input', (_event: IpcMainEvent, sessionId: string, data: string) => {
+    shellManager?.write(sessionId, data);
+  });
+
+  ipcMain.on('shell:resize', (_event: IpcMainEvent, sessionId: string, cols: number, rows: number) => {
+    shellManager?.resize(sessionId, cols, rows);
+  });
 }
 
 app.whenReady().then(() => {
@@ -212,6 +252,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  if (shellManager) shellManager.killAll();
   if (sessionManager) sessionManager.killAll();
   app.quit();
 });

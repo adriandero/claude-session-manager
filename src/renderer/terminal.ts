@@ -4,6 +4,7 @@ class TerminalWrapper {
   private fitAddon: FitAddon.FitAddon;
   private _resizeObserver: ResizeObserver;
   private onInputCallback: ((sessionId: string, data: string) => void) | null = null;
+  private onResizeCallback: ((cols: number, rows: number) => void) | null = null;
 
   activeSessionId: string | null = null;
 
@@ -52,7 +53,12 @@ class TerminalWrapper {
       }
     });
 
-    this._resizeObserver = new ResizeObserver(() => this.fit());
+    this._resizeObserver = new ResizeObserver(() => {
+      this.fit();
+      if (this.onResizeCallback) {
+        this.onResizeCallback(this.terminal.cols, this.terminal.rows);
+      }
+    });
     this._resizeObserver.observe(container);
   }
 
@@ -89,6 +95,20 @@ class TerminalWrapper {
 
   focus(): void {
     this.terminal.focus();
+  }
+
+  setVisible(visible: boolean): void {
+    this.container.style.display = visible ? 'block' : 'none';
+    if (visible) {
+      this.fit();
+      if (this.onResizeCallback) {
+        this.onResizeCallback(this.terminal.cols, this.terminal.rows);
+      }
+    }
+  }
+
+  onResize(callback: (cols: number, rows: number) => void): void {
+    this.onResizeCallback = callback;
   }
 
   dispose(): void {

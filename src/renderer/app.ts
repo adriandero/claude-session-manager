@@ -1,15 +1,93 @@
-let terminalWrapper: TerminalWrapper;
+let claudeTerminal: TerminalWrapper;
+let shellTerminal: TerminalWrapper;
 let activeSessionId: string | null = null;
+let activeTab: 'claude' | 'shell' = 'claude';
 const sessions = new Map<string, SessionInfo>();
+const shellCreated = new Set<string>();
 
 document.addEventListener('DOMContentLoaded', () => {
   const terminalPanel = document.getElementById('terminal-panel')!;
+  const shellPanel = document.getElementById('shell-panel')!;
+  const terminalTabs = document.getElementById('terminal-tabs')!;
   const emptyState = document.getElementById('empty-state')!;
 
-  terminalWrapper = new TerminalWrapper(terminalPanel);
+  claudeTerminal = new TerminalWrapper(terminalPanel);
+  shellTerminal = new TerminalWrapper(shellPanel);
 
-  terminalWrapper.onInput((sessionId: string, data: string) => {
+  claudeTerminal.onInput((sessionId: string, data: string) => {
     window.api.sendInput(sessionId, data);
+  });
+
+  shellTerminal.onInput((sessionId: string, data: string) => {
+    window.api.sendShellInput(sessionId, data);
+  });
+
+  claudeTerminal.onResize((cols: number, rows: number) => {
+    if (activeSessionId && activeTab === 'claude') {
+      window.api.resizeSession(activeSessionId, cols, rows);
+    }
+  });
+
+  shellTerminal.onResize((cols: number, rows: number) => {
+    if (activeSessionId && activeTab === 'shell') {
+      window.api.resizeShell(activeSessionId, cols, rows);
+    }
+  });
+
+  function setActiveTab(tab: 'claude' | 'shell'): void {
+    activeTab = tab;
+
+    // Update tab buttons
+    const tabs = terminalTabs.querySelectorAll('.terminal-tab');
+    tabs.forEach(t => {
+      t.classList.toggle('active', (t as HTMLElement).dataset.tab === tab);
+    });
+
+    if (tab === 'claude') {
+      shellTerminal.setVisible(false);
+      claudeTerminal.setVisible(true);
+      claudeTerminal.focus();
+    } else {
+      claudeTerminal.setVisible(false);
+      shellTerminal.setVisible(true);
+
+      if (activeSessionId && !shellCreated.has(activeSessionId)) {
+        // Lazily create shell on first access
+        window.api.createShell(activeSessionId).then((buffer: string) => {
+          if (activeSessionId) {
+            shellCreated.add(activeSessionId);
+            shellTerminal.switchTo(activeSessionId, buffer);
+            const { cols, rows } = shellTerminal.getDimensions();
+            window.api.resizeShell(activeSessionId, cols, rows);
+          }
+        });
+      } else if (activeSessionId && shellCreated.has(activeSessionId)) {
+        // Replay existing shell buffer
+        window.api.getShellBuffer(activeSessionId).then((buffer: string) => {
+          if (activeSessionId) {
+            shellTerminal.switchTo(activeSessionId, buffer);
+            const { cols, rows } = shellTerminal.getDimensions();
+            window.api.resizeShell(activeSessionId, cols, rows);
+          }
+        });
+      }
+
+      shellTerminal.focus();
+    }
+  }
+
+  // Tab click handlers
+  terminalTabs.addEventListener('click', (e: MouseEvent) => {
+    const target = (e.target as HTMLElement).closest('.terminal-tab') as HTMLElement | null;
+    if (!target) return;
+    const tab = target.dataset.tab as 'claude' | 'shell';
+    if (tab) setActiveTab(tab);
+  });
+
+  // Toggle terminal shortcut
+  window.api.onToggleTerminal(() => {
+    if (!activeSessionId) return;
+    setActiveTab(activeTab === 'claude' ? 'shell' : 'claude');
   });
 
   async function createNewSession(): Promise<void> {
@@ -101,8 +179,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.api.onOutput((sessionId: string, data: string) => {
     if (sessionId === activeSessionId) {
-      terminalWrapper.write(data);
+      claudeTerminal.write(data);
     }
+  });
+
+  window.api.onShellOutput((sessionId: string, data: string) => {
+    if (sessionId === activeSessionId && activeTab === 'shell') {
+      shellTerminal.write(data);
+    }
+  });
+
+  window.api.onShellExit((sessionId: string) => {
+    shellCreated.delete(sessionId);
   });
 
   window.api.onStateChange((sessionId: string, state: SessionStatus) => {
@@ -138,13 +226,24 @@ document.addEventListener('DOMContentLoaded', () => {
     activeSessionId = sessionId;
     window.api.setActiveSession(sessionId);
 
+    // Always reset to Claude tab on session switch
     terminalPanel.classList.add('visible');
+    terminalTabs.classList.add('visible');
     emptyState.style.display = 'none';
 
-    window.api.getBuffer(sessionId).then((buffer: string) => {
-      terminalWrapper.switchTo(sessionId, buffer);
+    // Reset to claude tab
+    activeTab = 'claude';
+    const tabs = terminalTabs.querySelectorAll('.terminal-tab');
+    tabs.forEach(t => {
+      t.classList.toggle('active', (t as HTMLElement).dataset.tab === 'claude');
+    });
+    shellTerminal.setVisible(false);
+    claudeTerminal.setVisible(true);
 
-      const { cols, rows } = terminalWrapper.getDimensions();
+    window.api.getBuffer(sessionId).then((buffer: string) => {
+      claudeTerminal.switchTo(sessionId, buffer);
+
+      const { cols, rows } = claudeTerminal.getDimensions();
       window.api.resizeSession(sessionId, cols, rows);
     });
 
@@ -211,10 +310,12 @@ document.addEventListener('DOMContentLoaded', () => {
       li.querySelector('.session-close')!.addEventListener('click', async () => {
         await window.api.killSession(id);
         sessions.delete(id);
+        shellCreated.delete(id);
 
         if (activeSessionId === id) {
           activeSessionId = null;
           terminalPanel.classList.remove('visible');
+          terminalTabs.classList.remove('visible');
           emptyState.style.display = '';
           const remaining = Array.from(sessions.keys());
           if (remaining.length > 0) switchToSession(remaining[0]);

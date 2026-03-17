@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { execSync } from 'child_process';
+import { execSync, exec } from 'child_process';
 import path from 'path';
 import * as pty from 'node-pty';
 import StateDetector, { SessionState } from './state-detector';
@@ -22,6 +22,7 @@ export interface Session {
   status: SessionState;
   buffer: string;
   stateDetector: StateDetector;
+  cwdTimer: ReturnType<typeof setInterval> | null;
 }
 
 let nextId = 1;
@@ -56,6 +57,7 @@ class SessionManager extends EventEmitter {
       status: 'idle',
       buffer: '',
       stateDetector,
+      cwdTimer: null,
     };
 
     ptyProcess.onData((data: string) => {
@@ -69,10 +71,16 @@ class SessionManager extends EventEmitter {
     });
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
+      if (session.cwdTimer) clearInterval(session.cwdTimer);
       session.status = 'done';
       this.emit('state-change', id, 'done');
       this.emit('exit', id, exitCode);
     });
+
+    // Poll the PTY process's cwd to detect worktree switches
+    session.cwdTimer = setInterval(() => {
+      this.pollCwd(session);
+    }, 2000);
 
     this.sessions.set(id, session);
     return session;
@@ -102,9 +110,31 @@ class SessionManager extends EventEmitter {
     return Array.from(this.sessions.values());
   }
 
+  private pollCwd(session: Session): void {
+    const pid = session.ptyProcess.pid;
+    // On macOS, use lsof to get the cwd of the process
+    exec(`lsof -a -d cwd -Fn -p ${pid} 2>/dev/null`, (err, stdout) => {
+      if (err || !stdout) return;
+      // lsof output: lines starting with 'n' contain the path
+      const lines = stdout.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('n/')) {
+          const newCwd = line.slice(1);
+          if (newCwd !== session.cwd) {
+            const oldCwd = session.cwd;
+            session.cwd = newCwd;
+            this.emit('cwd-change', session.id, newCwd, oldCwd);
+          }
+          break;
+        }
+      }
+    });
+  }
+
   killSession(id: string): void {
     const session = this.sessions.get(id);
     if (session) {
+      if (session.cwdTimer) clearInterval(session.cwdTimer);
       session.stateDetector.dispose();
       session.ptyProcess.kill();
       this.sessions.delete(id);
@@ -113,6 +143,7 @@ class SessionManager extends EventEmitter {
 
   killAll(): void {
     for (const session of this.sessions.values()) {
+      if (session.cwdTimer) clearInterval(session.cwdTimer);
       session.stateDetector.dispose();
       session.ptyProcess.kill();
     }
