@@ -1,8 +1,36 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog, globalShortcut, IpcMainInvokeEvent, IpcMainEvent } from 'electron';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import SessionManager from './src/session-manager';
 import NotificationService from './src/notification';
+
+const RECENT_DIRS_PATH = path.join(os.homedir(), '.claude-session-manager', 'recent-dirs.json');
+const MAX_RECENT_DIRS = 10;
+
+function loadRecentDirs(): string[] {
+  try {
+    return JSON.parse(fs.readFileSync(RECENT_DIRS_PATH, 'utf-8'));
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentDir(dir: string): void {
+  let dirs = loadRecentDirs();
+  dirs = dirs.filter(d => d !== dir);
+  dirs.unshift(dir);
+  dirs = dirs.slice(0, MAX_RECENT_DIRS);
+  const dirPath = path.dirname(RECENT_DIRS_PATH);
+  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+  fs.writeFileSync(RECENT_DIRS_PATH, JSON.stringify(dirs, null, 2));
+}
+
+function isRiskyPath(cwd: string): boolean {
+  const home = os.homedir();
+  const riskyPaths = ['/', '/tmp', '/var', '/etc', '/usr', '/System', '/Applications', home];
+  return riskyPaths.includes(cwd);
+}
 
 app.name = 'Claude Session Manager';
 
@@ -105,9 +133,7 @@ function createWindow(): void {
     if (result.canceled || result.filePaths.length === 0) return null;
 
     const cwd = path.resolve(result.filePaths[0]);
-    const home = os.homedir();
-    const riskyPaths = ['/', '/tmp', '/var', '/etc', '/usr', '/System', '/Applications', home];
-    if (riskyPaths.includes(cwd)) {
+    if (isRiskyPath(cwd)) {
       dialog.showErrorBox(
         'Invalid directory',
         `"${cwd}" is too broad to use as a working directory. Please choose a specific project folder.`,
@@ -115,6 +141,30 @@ function createWindow(): void {
       return null;
     }
 
+    saveRecentDir(cwd);
+    const session = sessionManager!.createSession(cwd);
+    return { id: session.id, name: session.name, cwd: session.cwd, status: session.status };
+  });
+
+  ipcMain.handle('session:recent-dirs', () => {
+    return loadRecentDirs();
+  });
+
+  ipcMain.handle('session:create-with-dir', async (_event: IpcMainInvokeEvent, cwd: string) => {
+    cwd = path.resolve(cwd);
+    if (isRiskyPath(cwd)) {
+      dialog.showErrorBox(
+        'Invalid directory',
+        `"${cwd}" is too broad to use as a working directory. Please choose a specific project folder.`,
+      );
+      return null;
+    }
+    if (!fs.existsSync(cwd)) {
+      dialog.showErrorBox('Directory not found', `"${cwd}" does not exist.`);
+      return null;
+    }
+
+    saveRecentDir(cwd);
     const session = sessionManager!.createSession(cwd);
     return { id: session.id, name: session.name, cwd: session.cwd, status: session.status };
   });

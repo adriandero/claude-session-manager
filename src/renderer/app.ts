@@ -21,13 +21,80 @@ document.addEventListener('DOMContentLoaded', () => {
     switchToSession(session.id);
   }
 
-  document.getElementById('new-session-btn')!.addEventListener('click', createNewSession);
+  async function createSessionFromDir(dir: string): Promise<void> {
+    const session = await window.api.createSessionWithDir(dir);
+    if (!session) return;
+
+    sessions.set(session.id, session);
+    renderSidebar();
+    switchToSession(session.id);
+  }
+
+  function closeRecentDirsMenu(): void {
+    const existing = document.getElementById('recent-dirs-menu');
+    if (existing) existing.remove();
+  }
+
+  async function showNewSessionMenu(): Promise<void> {
+    closeRecentDirsMenu();
+    const recentDirs = await window.api.getRecentDirs();
+
+    if (recentDirs.length === 0) {
+      createNewSession();
+      return;
+    }
+
+    const btn = document.getElementById('new-session-btn')!;
+    const menu = document.createElement('div');
+    menu.id = 'recent-dirs-menu';
+
+    for (const dir of recentDirs) {
+      const item = document.createElement('div');
+      item.className = 'recent-dir-item';
+      item.title = dir;
+      item.textContent = dir.split('/').pop() || dir;
+
+      const dirPath = document.createElement('span');
+      dirPath.className = 'recent-dir-path';
+      // Shorten /Users/xxx/... to ~/...
+      dirPath.textContent = dir.replace(/^\/Users\/[^/]+/, '~');
+      item.appendChild(dirPath);
+
+      item.addEventListener('click', () => {
+        closeRecentDirsMenu();
+        createSessionFromDir(dir);
+      });
+      menu.appendChild(item);
+    }
+
+    const browseItem = document.createElement('div');
+    browseItem.className = 'recent-dir-item browse-item';
+    browseItem.textContent = 'Browse...';
+    browseItem.addEventListener('click', () => {
+      closeRecentDirsMenu();
+      createNewSession();
+    });
+    menu.appendChild(browseItem);
+
+    btn.parentElement!.appendChild(menu);
+
+    // Close when clicking outside
+    const onClickOutside = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node) && e.target !== btn) {
+        closeRecentDirsMenu();
+        document.removeEventListener('click', onClickOutside);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', onClickOutside), 0);
+  }
+
+  document.getElementById('new-session-btn')!.addEventListener('click', showNewSessionMenu);
   document.getElementById('rename-session-btn')!.addEventListener('click', () => {
     if (!activeSessionId) return;
     const nameSpan = document.querySelector(`#session-list li.active .session-name`) as HTMLSpanElement | null;
     if (nameSpan) startRename(activeSessionId, nameSpan);
   });
-  window.api.onNewSession(createNewSession);
+  window.api.onNewSession(showNewSessionMenu);
   window.api.onSwitchSession((sessionId: string) => {
     if (sessions.has(sessionId)) switchToSession(sessionId);
   });

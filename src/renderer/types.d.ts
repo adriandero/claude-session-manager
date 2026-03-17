@@ -31,6 +31,8 @@ type SessionStatus = 'working' | 'needs-input' | 'idle' | 'done';
 
 interface ElectronAPI {
   createSession(): Promise<SessionInfo | null>;
+  createSessionWithDir(dir: string): Promise<SessionInfo | null>;
+  getRecentDirs(): Promise<string[]>;
   killSession(id: string): Promise<void>;
   listSessions(): Promise<SessionInfo[]>;
   getBuffer(id: string): Promise<string>;

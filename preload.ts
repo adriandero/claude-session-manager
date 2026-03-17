@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('api', {
   createSession: (): Promise<unknown> => ipcRenderer.invoke('session:create'),
+  createSessionWithDir: (dir: string): Promise<unknown> => ipcRenderer.invoke('session:create-with-dir', dir),
+  getRecentDirs: (): Promise<string[]> => ipcRenderer.invoke('session:recent-dirs'),
   killSession: (id: string): Promise<void> => ipcRenderer.invoke('session:kill', id),
   listSessions: (): Promise<unknown[]> => ipcRenderer.invoke('session:list'),
   getBuffer: (id: string): Promise<string> => ipcRenderer.invoke('session:buffer', id),
