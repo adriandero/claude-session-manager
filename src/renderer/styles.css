@@ -242,8 +242,10 @@ html, body {
   transition: background 0.15s;
 }
 
-.recent-dir-item:hover {
+.recent-dir-item:hover,
+.recent-dir-item:focus {
   background: var(--bg-hover);
+  outline: none;
 }
 
 .recent-dir-path {
@@ -338,6 +340,69 @@ html, body {
 #empty-state .hint {
   font-size: 13px;
   opacity: 0.6;
+}
+
+/* Close confirmation modal */
+#close-confirm-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.close-confirm-dialog {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 20px 24px;
+  min-width: 240px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.close-confirm-dialog p {
+  font-size: 14px;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.close-confirm-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.close-confirm-btn {
+  padding: 6px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.close-confirm-btn.confirm {
+  background: var(--color-done);
+  color: var(--bg-primary);
+  border-color: var(--color-done);
+}
+
+.close-confirm-btn.confirm:hover {
+  opacity: 0.85;
+}
+
+.close-confirm-btn.cancel {
+  background: none;
+  color: var(--text-secondary);
+}
+
+.close-confirm-btn.cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* xterm overrides */

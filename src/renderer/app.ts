@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
     for (const dir of recentDirs) {
       const item = document.createElement('div');
       item.className = 'recent-dir-item';
+      item.tabIndex = 0;
       item.title = dir;
       item.textContent = dir.split('/').pop() || dir;
 
@@ -147,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const browseItem = document.createElement('div');
     browseItem.className = 'recent-dir-item browse-item';
+    browseItem.tabIndex = 0;
     browseItem.textContent = 'Browse...';
     browseItem.addEventListener('click', () => {
       closeRecentDirsMenu();
@@ -155,6 +157,33 @@ document.addEventListener('DOMContentLoaded', () => {
     menu.appendChild(browseItem);
 
     btn.parentElement!.appendChild(menu);
+
+    // Keyboard navigation within the menu
+    menu.addEventListener('keydown', (e: KeyboardEvent) => {
+      const items = Array.from(menu.querySelectorAll('.recent-dir-item')) as HTMLElement[];
+      const focused = document.activeElement as HTMLElement;
+      const index = items.indexOf(focused);
+
+      if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+        e.preventDefault();
+        const next = index < items.length - 1 ? index + 1 : 0;
+        items[next].focus();
+      } else if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) {
+        e.preventDefault();
+        const prev = index > 0 ? index - 1 : items.length - 1;
+        items[prev].focus();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (index >= 0) items[index].click();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeRecentDirsMenu();
+      }
+    });
+
+    // Focus first item
+    const firstItem = menu.querySelector('.recent-dir-item') as HTMLElement | null;
+    if (firstItem) firstItem.focus();
 
     // Close when clicking outside
     const onClickOutside = (e: MouseEvent) => {
@@ -210,7 +239,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    if (!e.metaKey) return;
+
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       const ids = Array.from(sessions.keys());
       if (ids.length < 2) return;
@@ -219,6 +250,44 @@ document.addEventListener('DOMContentLoaded', () => {
         ? (currentIndex + 1) % ids.length
         : (currentIndex - 1 + ids.length) % ids.length;
       switchToSession(ids[next]);
+      return;
+    }
+
+    // Cmd+1-9: jump to session by position
+    const digit = parseInt(e.key, 10);
+    if (digit >= 1 && digit <= 9) {
+      e.preventDefault();
+      const ids = Array.from(sessions.keys());
+      if (ids[digit - 1]) switchToSession(ids[digit - 1]);
+      return;
+    }
+
+    // Cmd+T: new session in same project as active session
+    if (e.key === 't') {
+      e.preventDefault();
+      const activeSession = activeSessionId ? sessions.get(activeSessionId) : null;
+      if (activeSession?.cwd) {
+        createSessionFromDir(activeSession.cwd);
+      } else {
+        createNewSession();
+      }
+      return;
+    }
+
+    // Cmd+W: close active session with confirmation
+    if (e.key === 'w') {
+      e.preventDefault();
+      if (activeSessionId) showCloseConfirmation(activeSessionId);
+      return;
+    }
+
+    // Cmd+R: rename active session
+    if (e.key === 'r') {
+      e.preventDefault();
+      if (!activeSessionId) return;
+      const nameSpan = document.querySelector(`#session-list li.active .session-name`) as HTMLSpanElement | null;
+      if (nameSpan) startRename(activeSessionId, nameSpan);
+      return;
     }
   });
 
@@ -248,6 +317,63 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     renderSidebar();
+  }
+
+  async function closeSession(id: string): Promise<void> {
+    await window.api.killSession(id);
+    sessions.delete(id);
+    shellCreated.delete(id);
+
+    if (activeSessionId === id) {
+      activeSessionId = null;
+      terminalPanel.classList.remove('visible');
+      terminalTabs.classList.remove('visible');
+      emptyState.style.display = '';
+      const remaining = Array.from(sessions.keys());
+      if (remaining.length > 0) switchToSession(remaining[0]);
+    }
+
+    renderSidebar();
+  }
+
+  function showCloseConfirmation(sessionId: string): void {
+    // Remove existing modal if any
+    const existing = document.getElementById('close-confirm-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'close-confirm-modal';
+    overlay.innerHTML = `
+      <div class="close-confirm-dialog">
+        <p>Close this session?</p>
+        <div class="close-confirm-buttons">
+          <button class="close-confirm-btn confirm" autofocus>Close</button>
+          <button class="close-confirm-btn cancel">Cancel</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const confirmBtn = overlay.querySelector('.confirm') as HTMLButtonElement;
+    const cancelBtn = overlay.querySelector('.cancel') as HTMLButtonElement;
+    confirmBtn.focus();
+
+    const dismiss = () => overlay.remove();
+
+    confirmBtn.addEventListener('click', () => {
+      dismiss();
+      closeSession(sessionId);
+    });
+
+    cancelBtn.addEventListener('click', dismiss);
+
+    overlay.addEventListener('click', (e: MouseEvent) => {
+      if (e.target === overlay) dismiss();
+    });
+
+    overlay.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape') dismiss();
+    });
   }
 
   function startRename(sessionId: string, nameSpan: HTMLSpanElement): void {
@@ -324,21 +450,8 @@ document.addEventListener('DOMContentLoaded', () => {
           switchToSession(id);
         });
 
-        li.querySelector('.session-close')!.addEventListener('click', async () => {
-          await window.api.killSession(id);
-          sessions.delete(id);
-          shellCreated.delete(id);
-
-          if (activeSessionId === id) {
-            activeSessionId = null;
-            terminalPanel.classList.remove('visible');
-            terminalTabs.classList.remove('visible');
-            emptyState.style.display = '';
-            const remaining = Array.from(sessions.keys());
-            if (remaining.length > 0) switchToSession(remaining[0]);
-          }
-
-          renderSidebar();
+        li.querySelector('.session-close')!.addEventListener('click', () => {
+          closeSession(id);
         });
 
         list.appendChild(li);
